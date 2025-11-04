@@ -9,6 +9,8 @@ const gameState = {
     isGameCompleted: false,
     isSpeaking: false,
     usedQuizCards: [],
+    // Track which cards have been seen to prevent double counting
+    seenCardIndices: new Set(),
     // 15 Questions targeting Data & Privacy Literacy and Cyber Hygiene
     facts: [
         // Data & Privacy Literacy (8 questions)
@@ -203,6 +205,24 @@ function playSound(soundName) {
     }
 }
 
+// FIXED: Separate function for listening again - INTERRUPTS current audio and starts immediately
+function listenAgain(text) {
+    // Immediately stop any current speech
+    if ('speechSynthesis' in window) {
+        speechSynthesis.cancel(); // This stops any ongoing speech immediately
+        
+        // Create a completely separate utterance that doesn't interact with game state
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'hi-IN';
+        utterance.rate = 0.8;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+        
+        // No callbacks, no game state changes
+        speechSynthesis.speak(utterance);
+    }
+}
+
 // Start the game
 function startGame() {
     playSound('start');
@@ -215,6 +235,7 @@ function startGame() {
     gameState.isGameCompleted = false;
     gameState.isSpeaking = false;
     gameState.usedQuizCards = [];
+    gameState.seenCardIndices = new Set(); // Reset seen indices
     
     // Shuffle and select 15 cards
     const shuffledFacts = [...gameState.facts].sort(() => Math.random() - 0.5);
@@ -238,15 +259,26 @@ function startGame() {
                 <div class="card-back">
                     <div class="card-shine"></div>
                     <div class="fact-text">${card.text}</div>
+                    <button class="listen-btn">फिर से सुनें</button>
                 </div>
             </div>
         `;
         
         // Add click event to flip card
-        cardElement.addEventListener('click', function() {
-            if (!gameState.isQuizActive && !gameState.isGameCompleted) {
+        cardElement.addEventListener('click', function(e) {
+            // Don't flip if clicking the listen button
+            if (!e.target.classList.contains('listen-btn') && 
+                !gameState.isQuizActive && 
+                !gameState.isGameCompleted) {
                 flipCard(index);
             }
+        });
+        
+        // Add event listener for the listen button
+        const listenBtn = cardElement.querySelector('.listen-btn');
+        listenBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent card flip
+            listenAgain(card.text); // Use completely isolated function
         });
         
         cardContainer.appendChild(cardElement);
@@ -278,22 +310,23 @@ function flipCard(index) {
             speakText(gameState.cards[index].text, () => {
                 // This callback runs after TTS completes
                 
-                // Mark card as seen after 15 seconds
-                setTimeout(() => {
-                    cardElement.classList.add('seen');
-                    
-                    // Update game state
+                // Mark card as seen immediately after TTS
+                cardElement.classList.add('seen');
+                
+                // Update game state - ONLY if this card hasn't been seen before
+                if (!gameState.seenCardIndices.has(index)) {
                     gameState.seenCards++;
+                    gameState.seenCardIndices.add(index);
                     updateProgress();
                     
                     // Add to quiz cards
                     gameState.quizCards.push(gameState.cards[index]);
                     
-                    // Check if it's time for a quiz (after 6 cards)
-                    if (gameState.seenCards === 6) {
+                    // Check if it's time for a quiz (after every 5 cards)
+                    if (gameState.seenCards % 5 === 0 && gameState.seenCards > 0) {
                         console.log(`Showing quiz after ${gameState.seenCards} cards`);
                         if (!gameState.isGameCompleted) {
-                            // Show quiz immediately after 6th card voiceover ends
+                            // Show quiz immediately after TTS ends
                             showQuiz();
                         }
                     }
@@ -303,7 +336,7 @@ function flipCard(index) {
                         gameState.isGameCompleted = true;
                         showCompletion();
                     }
-                }, 15000); // 15 seconds delay for dimming
+                }
             });
         }, 400); // Wait for flip animation to complete before starting TTS
     }
@@ -320,13 +353,13 @@ function showQuiz() {
     
     gameState.isQuizActive = true;
     
-    // Get the last 6 cards for the quiz
-    const recentQuizCards = gameState.quizCards.slice(-6);
+    // Get the last 5 cards for the quiz
+    const recentQuizCards = gameState.quizCards.slice(-5);
     const availableQuizCards = recentQuizCards.filter(card => 
         !gameState.usedQuizCards.includes(card.text)
     );
     
-    // If all recent cards are used, reset and use any from recent 6
+    // If all recent cards are used, reset and use any from recent 5
     let randomCard;
     if (availableQuizCards.length > 0) {
         randomCard = availableQuizCards[Math.floor(Math.random() * availableQuizCards.length)];
@@ -399,7 +432,7 @@ function showCompletion() {
     showScreen('completion');
 }
 
-// Text-to-speech function with callback
+// Text-to-speech function with callback - ONLY USED FOR CARD FLIPS
 function speakText(text, callback) {
     if ('speechSynthesis' in window) {
         speechSynthesis.cancel();
