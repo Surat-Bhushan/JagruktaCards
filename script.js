@@ -9,7 +9,7 @@ const gameState = {
     isGameCompleted: false,
     isSpeaking: false,
     usedQuizCards: [],
-    // Track which cards have been seen to prevent double counting
+    // Track which cards have been seen to prevent double-counting
     seenCardIndices: new Set(),
     // 15 Questions targeting Data & Privacy Literacy and Cyber Hygiene
     facts: [
@@ -163,8 +163,8 @@ function initGame() {
     // Set up event listeners
     document.getElementById('start-btn').addEventListener('click', startGame);
     document.getElementById('back-to-home-btn').addEventListener('click', () => showScreen('home'));
-    document.getElementById('play-again-btn').addEventListener('click', startGame);
-    document.getElementById('back-to-home-completion-btn').addEventListener('click', () => showScreen('home'));
+    document.getElementById('play-again-btn').addEventListener('click', () => showScreen('home'));
+    //document.getElementById('back-to-home-completion-btn').addEventListener('click', () => showScreen('https://surakshanet-2025.web.app/'));
     
     // Start background music
     audioElements.bg.volume = 0.2;
